@@ -1,0 +1,187 @@
+---
+title: "Chapter 23"
+author: "Alan T. Arnholt"
+date: 'Last compiled: `r format(Sys.time(), "%B %d, %Y at %X")`'
+output: bookdown::html_document2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, warning = FALSE, message = FALSE, fig.align = "center")
+library(tidyverse)
+library(janitor)
+```
+
+# Inferences for Regression
+
+```{r}
+bodyfat <- read.csv("./DATA/Bodyfat.csv") %>% 
+  clean_names()
+head(bodyfat)
+```
+
+```{r, label = "fig231", fig.cap = "Percent body fat versus waist size for 250 men of various ages.  The scatterplot shows a strong, positive, linear relationship."}
+ggplot(data = bodyfat, aes(x = waist, y = pct_bf)) + 
+  geom_point(color = "blue") +
+  theme_bw() + 
+  labs(x = "Waist (in.)", y = "% Body Fat")
+```
+
+## Fitting a least squares model to Figure \@ref(fig:fig231)
+
+```{r}
+mod_lm <- lm(pct_bf ~ waist, data = bodyfat)
+mod_lm
+summary(mod_lm)
+library(moderndive)
+get_regression_table(mod_lm)
+```
+
+* Review on the board $z$ and $t$ scores. 
+* Review $t$ statistics from regression output.
+* Review confidence intervals and their derivation.
+
+```{r}
+summary(mod_lm)$coef
+b1 <- summary(mod_lm)$coef[2, 1]
+seb1 <- summary(mod_lm)$coef[2, 2]
+c(b1, seb1, b1/seb1, pt(b1/seb1, 248, lower = FALSE)*2)
+#
+# CI for beta_1
+b1 + c(-1,1)*qt(.975, 248)*seb1
+#
+confint(mod_lm, level = 0.95)
+```
+
+## Residual and Q-Q Plots
+
+```{r}
+# With ggplot
+library(broom)
+augment(mod_lm) %>% 
+  clean_names() -> aug_mod
+ggplot(data = aug_mod, aes(x = fitted, y = resid)) + 
+  geom_point() +
+  theme_bw() + 
+  geom_hline(yintercept = 0, linetype = "dashed")
+
+ggplot(data = aug_mod, aes(sample = waist)) + 
+  geom_qq() +
+  geom_qq_line() +
+  theme_bw() 
+  
+```
+
+```{r}
+library(car)
+residualPlot(mod_lm)
+qqPlot(mod_lm)
+```
+```{r}
+# Base R
+plot(mod_lm, which = 1)
+plot(mod_lm, which = 2)
+```
+
+## Residual Standard Deviation
+
+$$s_{e} = \sqrt{\frac{\sum(y - \hat{y})^2}{n-2}}$$
+
+```{r}
+summary(mod_lm)
+summary(mod_lm)$sigma -> s_e
+s_e
+### By hand now
+yhat <- fitted(mod_lm)
+y <- bodyfat$pct_bf
+se1 <- sqrt(sum((y - yhat)^2)/248)
+se1
+```
+
+## Slopes Vary Revisited
+
+```{r}
+# Take 1000 random samples of size 250
+set.seed(3)
+n <- 1000
+b1 <- numeric(n)
+for(i in 1:n){
+DF <- sample_n(bodyfat, size = 250, replace = TRUE)
+mod <- lm(pct_bf ~ waist, data = DF)
+b1[i] <- mod$coefficients[2]
+}
+ep <- quantile(b1, probs = c(0.025, 0.975))
+ep
+```
+
+## Multiple Regression Inference
+
+```{r}
+mod_mr <- lm(pct_bf ~ waist + height, data = bodyfat)
+summary(mod_mr)
+```
+
+## Collinearity
+
+```{r}
+coasters <- read.csv("./DATA/Coasters_2015.csv") %>% 
+  clean_names() %>% 
+filter(name != "Xcelerator", name != "Tower of Terror")
+mod_1 <- lm(duration ~ drop, data = coasters)
+mod_2 <- lm(duration ~ drop + speed, data = coasters)
+summary(mod_1)
+summary(mod_2)
+# from car ---- Variance Inflation Factor vif
+vif(mod_2)
+```
+
+## Confidence and Prediction Intervals
+
+```{r}
+# Mean Body Fat for male with 38 inch waist - CI
+predict(mod_lm, newdata = data.frame(waist = 38), interval = "confidence", level = 0.95)
+
+# Prediction individual with a 38 inch waist
+predict(mod_lm, newdata = data.frame(waist = 38), interval = "predict", level = 0.95)
+```
+
+## Logistic Regression
+
+```{r}
+pima <- read.csv("./DATA/Pima_indians.csv") %>% 
+  clean_names() %>% 
+  filter(bmi != 0)
+head(pima)
+###
+ggplot(data = pima, aes(x = factor(diabetes), y = bmi)) + 
+  geom_boxplot() + 
+  theme_bw()
+###
+ggplot(data = pima, aes(x = bmi, y = diabetes)) + 
+  geom_point() +
+  theme_bw() + 
+  geom_smooth(method = "glm", method.args = list(family = "binomial"))
+```
+
+```{r}
+mod_lr <- glm(diabetes ~ bmi, data = pima, family = "binomial")
+summary(mod_lr)
+predict(mod_lr, newdata = data.frame(bmi = 60), type = "response")
+```
+
+## Problems
+
+```{r}
+earnings <- read.csv("./DATA/Graduate_Earnings.csv") %>% 
+  clean_names()
+head(earnings)
+mod <- lm(earn ~ sat, data = earnings)
+summary(mod)
+confint(mod)
+mod2 <- lm(earn ~ sat + need_fraction, data = earnings)
+summary(mod2)
+mod3 <- lm(earn ~ sat + need_fraction + act, data = earnings)
+summary(mod3)
+predict(mod3, newdata = data.frame(sat = 1200, need_fraction = 0.5, act = 26), interval = "confidence")
+predict(mod3, newdata = data.frame(sat = 1200, need_fraction = 0.5, act = 26), interval = "predict")
+```
+
